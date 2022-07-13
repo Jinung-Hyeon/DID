@@ -61,7 +61,11 @@ public class MainActivity extends AppCompatActivity {
             public void onDataChange(@NonNull DataSnapshot snapshot) {
                 Log.e(TAG, snapshot.toString() );
                 Log.e(TAG, snapshot.getValue().toString() );
-                Log.e(TAG, snapshot.getKey() );
+                info get = snapshot.getValue(info.class);
+                Log.e(TAG, String.valueOf(get.user));
+                Log.e(TAG, String.valueOf(get.status));
+
+
             }
 
             @Override
@@ -177,6 +181,8 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onUserLeaveHint() {
         super.onUserLeaveHint();
+        info info = new info("HOME", 0);
+        database.getReference().child("INFO").setValue(info);
     }
 
     @Override
@@ -192,7 +198,8 @@ public class MainActivity extends AppCompatActivity {
         }
 
         if (System.currentTimeMillis() <= backKeyPressedTime + 2000) {
-
+            info info = new info("DISCONNECTED", 1);
+            database.getReference().child("INFO").setValue(info);
             ActivityCompat.finishAffinity(this);
             System.exit(0);
             toast.cancel();
