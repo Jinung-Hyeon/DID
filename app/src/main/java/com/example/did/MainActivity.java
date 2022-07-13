@@ -41,6 +41,14 @@ public class MainActivity extends AppCompatActivity {
 
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        Log.e(TAG, "onResume!!");
+        info info = new info("CONNECTED", 0);
+        database.getReference().child("INFO").setValue(info);
+    }
+
+    @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
@@ -61,6 +69,7 @@ public class MainActivity extends AppCompatActivity {
             public void onDataChange(@NonNull DataSnapshot snapshot) {
                 Log.e(TAG, snapshot.toString() );
                 Log.e(TAG, snapshot.getValue().toString() );
+
                 info get = snapshot.getValue(info.class);
                 Log.e(TAG, String.valueOf(get.user));
                 Log.e(TAG, String.valueOf(get.status));
