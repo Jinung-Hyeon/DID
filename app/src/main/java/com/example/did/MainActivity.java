@@ -18,7 +18,10 @@ import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.ValueEventListener;
 
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.Calendar;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Timer;
@@ -28,17 +31,37 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "osslog";
     FirebaseDatabase database;
-    DatabaseReference connectedRef, myStatus, serverStatus, adminSignal;
+    DatabaseReference connectedRef, myStatus, serverStatus, adminSignal, startWorkTime, finishWorkTime;
 
     public static int USER_SIGNAL= 0;
 
     // 시간 비교를 위한 객체
-    Calendar calendar;
+    Calendar startWorkCalendar, finishWorkCalendar;
+
+    long startTime, finishTime;
+
+    //화면 킬 시간 변수
+    public static final int WAKEUP_HOUR = 8;
+    public static final int WAKEUP_MINIUTE = 30;
+    public static final int WAKEUP_SECOND = 0;
+    public static final int WAKEUP_MILISECOND = 0;
+
+    //화면 끌 시간 변수
+    public static final int GOTOSLEEP_HOUR = 17;
+    public static final int GOTOSLEEP_MINIUTE = 24;
+    public static final int GOTOSLEEP_SECOND = 0;
+    public static final int GOTOSLEEP_MILISECOND = 0;
 
 
     // 뒤로가기 버튼 두번 누르면 종료되는 기능 중 사용될 변수
     private long backKeyPressedTime = 0;
     private Toast toast;
+
+    // 시간 데이터 포맷팅 (ex. 2022/07/14 11:25:35)
+    SimpleDateFormat sdf = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
+
+    // 데이터베이스에서 시간넘어와서 밀리세컨드로 변환하기위한 변수수
+   Date date = null;
 
 
     @Override
@@ -58,22 +81,68 @@ public class MainActivity extends AppCompatActivity {
 
         database = FirebaseDatabase.getInstance();
         connectedRef = database.getReference(".info/connected");
-        myStatus = database.getReference("STATUS_Client");
-        serverStatus = database.getReference("STATUS_Server");
-        adminSignal = database.getReference("ADMIN_SIGNAL");
+        myStatus = database.getReference("yeonggwang1/STATUS_Client");
+        serverStatus = database.getReference("yeonggwang1/STATUS_Server");
+        adminSignal = database.getReference("yeonggwang1/ADMIN_SIGNAL");
+        startWorkTime = database.getReference("yeonggwang1/START_TIME");
+        finishWorkTime = database.getReference("yeonggwang1/END_TIME");
 
 
 
+
+        // 관리자가 보낼 시그널 처음엔 0초기화
         adminSignal.setValue(USER_SIGNAL);
-
 
         // 앱이 데이터베이스와 연결이 끊겼을시 파이어베이스 STATUS_Client 노드에 값 저장
         myStatus.onDisconnect().setValue("disconnected");
 
 
-        // 일과 시간 메소드
-        workTime();
+        // 일과 시작 시간 변경시 동작되는 이벤트
+        startWorkTime.addValueEventListener(new ValueEventListener() {
+            @Override
+            public void onDataChange(@NonNull DataSnapshot snapshot) {
+                Log.e(TAG, snapshot.getValue().toString());
+                try {
+                    date = sdf.parse(snapshot.getValue().toString());
+                } catch (ParseException e) {
+                    e.printStackTrace();
+                }
 
+                startTime = date.getTime();
+                Log.e(TAG, String.valueOf(startTime));
+
+            }
+
+            @Override
+            public void onCancelled(@NonNull DatabaseError error) {
+
+            }
+        });
+
+        // 일과 종료 시간 변경시 동작되는 이벤트
+        finishWorkTime.addValueEventListener(new ValueEventListener() {
+            @Override
+            public void onDataChange(@NonNull DataSnapshot snapshot) {
+                Log.e(TAG, snapshot.getValue().toString());
+                try {
+                    date = sdf.parse(snapshot.getValue().toString());
+                } catch (ParseException e) {
+                    e.printStackTrace();
+                }
+
+                finishTime = date.getTime();
+                Log.e(TAG, String.valueOf(finishTime));
+            }
+
+            @Override
+            public void onCancelled(@NonNull DatabaseError error) {
+
+            }
+        });
+
+
+        // 일과 시간 메소드
+        makeWorkTime(WAKEUP_HOUR, WAKEUP_MINIUTE, WAKEUP_SECOND, WAKEUP_MILISECOND, GOTOSLEEP_HOUR, GOTOSLEEP_MINIUTE, GOTOSLEEP_SECOND, GOTOSLEEP_MILISECOND);
 
         // 서버의 STATUS가 변경될때 동작하는 이벤트 리스너
         serverStatus.addValueEventListener(new ValueEventListener() {
@@ -86,8 +155,8 @@ public class MainActivity extends AppCompatActivity {
                 // watchdog앱이 꺼지면 다시실행
                 if (snapshot.getValue().toString().equals("disconnected")){
                     // 일과시간 보다 일찍 앱이 종료되면 예기치 않은 종료라 판단하고 다시 앱실행.
-                    if (workTime() > System.currentTimeMillis()){
-                        Log.e(TAG, "일과시간 : " + workTime() + " 현재시간 : " + System.currentTimeMillis() + ". 아직 일과시간입니다. 앱을 다시 실행시킵니다.");
+                    if (finishTime > System.currentTimeMillis()){
+                        Log.e(TAG, "일과시간 : " + finishTime + " 현재시간 : " + System.currentTimeMillis() + ". 아직 일과시간입니다. 앱을 다시 실행시킵니다.");
                         getPackageList("watchdog");
                     }
                 } else if(snapshot.getValue().toString().equals("connected")){
@@ -148,13 +217,30 @@ public class MainActivity extends AppCompatActivity {
 
 
     // 일과 시간 지정하는 메소드
-    public long workTime(){
-        calendar = Calendar.getInstance();
-        calendar.set(Calendar.HOUR_OF_DAY, 15);
-        calendar.set(Calendar.MINUTE, 30);
-        calendar.set(Calendar.SECOND, 0);
-        calendar.set(Calendar.MILLISECOND, 0);
-        return calendar.getTimeInMillis();
+    public void makeWorkTime(int startHour, int startMinute, int startSecond, int startMillisecond,
+                              int finishHour, int finishMinute, int finishSecond, int finishMillisecond){
+        startWorkCalendar = Calendar.getInstance();
+        finishWorkCalendar = Calendar.getInstance();
+
+        startWorkCalendar.set(Calendar.HOUR_OF_DAY, startHour);
+        startWorkCalendar.set(Calendar.MINUTE, startMinute);
+        startWorkCalendar.set(Calendar.SECOND, startSecond);
+        startWorkCalendar.set(Calendar.MILLISECOND, startMillisecond);
+
+        finishWorkCalendar.set(Calendar.HOUR_OF_DAY, finishHour);
+        finishWorkCalendar.set(Calendar.MINUTE, finishMinute);
+        finishWorkCalendar.set(Calendar.SECOND, finishSecond);
+        finishWorkCalendar.set(Calendar.MILLISECOND, finishMillisecond);
+
+        startTime = startWorkCalendar.getTimeInMillis();
+        finishTime = finishWorkCalendar.getTimeInMillis();
+
+
+        String formatStartTime = sdf.format(startWorkCalendar.getTimeInMillis());
+        String formatFinishTime = sdf.format(finishWorkCalendar.getTimeInMillis());
+        startWorkTime.setValue(formatStartTime);
+        finishWorkTime.setValue(formatFinishTime);
+
     }
 
     @Override
