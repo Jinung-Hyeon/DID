@@ -5,11 +5,13 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.os.Bundle;
 import android.os.CountDownTimer;
 import android.util.Log;
+import android.view.WindowManager;
 import android.widget.Toast;
 
 import com.google.firebase.database.DataSnapshot;
@@ -38,7 +40,8 @@ public class MainActivity extends AppCompatActivity {
     // 시간 비교를 위한 객체
     Calendar startWorkCalendar, finishWorkCalendar;
 
-    long startTime, finishTime;
+    // 일과 시작, 종료 시간(밀리세컨드)으로 사용할 변수
+    public static long startTime, finishTime;
 
     //화면 킬 시간 변수
     public static final int WAKEUP_HOUR = 8;
@@ -58,10 +61,12 @@ public class MainActivity extends AppCompatActivity {
     private Toast toast;
 
     // 시간 데이터 포맷팅 (ex. 2022/07/14 11:25:35)
-    SimpleDateFormat sdf = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
+    SimpleDateFormat day = new SimpleDateFormat("yyyy/MM/dd");
+    SimpleDateFormat hours = new SimpleDateFormat("HH:mm:ss");
 
     // 데이터베이스에서 시간넘어와서 밀리세컨드로 변환하기위한 변수수
-   Date date = null;
+    public static Date date = null;
+    public static Date todayDate = null;
 
 
     @Override
@@ -72,12 +77,27 @@ public class MainActivity extends AppCompatActivity {
 
         // WatchDog에서 HOME키나 멀티탭키로 나갔을때 다시 앱을 실행시켜주면 onResume을 타기때문에 여기서 초기화
         adminSignal.setValue(0);
+
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON);
+
+        try {
+            overridePendingTransition(0,0);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        Alarm alarm = new Alarm();
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(Intent.ACTION_SCREEN_ON);
+        filter.addAction(Intent.ACTION_SCREEN_OFF);
+        registerReceiver(alarm, filter);
+
 
         database = FirebaseDatabase.getInstance();
         connectedRef = database.getReference(".info/connected");
@@ -96,20 +116,28 @@ public class MainActivity extends AppCompatActivity {
         // 앱이 데이터베이스와 연결이 끊겼을시 파이어베이스 STATUS_Client 노드에 값 저장
         myStatus.onDisconnect().setValue("disconnected");
 
-
         // 일과 시작 시간 변경시 동작되는 이벤트
         startWorkTime.addValueEventListener(new ValueEventListener() {
             @Override
             public void onDataChange(@NonNull DataSnapshot snapshot) {
                 Log.e(TAG, snapshot.getValue().toString());
+
+                // 파이어베이스에 일과시작 데이터가 ""이면 코드에있는 기본값으로 일과 시작 시간 설정
+                if(snapshot.getValue().toString().equals("")){
+                    Log.e(TAG, "일과 시작에 설정된 시간이 없습니다. 기본 시간으로 설정합니다.");
+                    makeStartWorkTime(WAKEUP_HOUR, WAKEUP_MINIUTE, WAKEUP_SECOND, WAKEUP_MILISECOND);
+                }
+
                 try {
-                    date = sdf.parse(snapshot.getValue().toString());
+                    date = hours.parse(snapshot.getValue().toString());
+                    todayDate = day.parse(day.format(System.currentTimeMillis()));
                 } catch (ParseException e) {
                     e.printStackTrace();
                 }
 
-                startTime = date.getTime();
-                Log.e(TAG, String.valueOf(startTime));
+                Log.e(TAG, "date.getTime : " + date.getTime() + " todayDate : " + todayDate.getTime());
+                startTime = date.getTime() + todayDate.getTime();
+                Log.e(TAG, "시작 예약 시간 : " + startTime);
 
             }
 
@@ -124,14 +152,22 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onDataChange(@NonNull DataSnapshot snapshot) {
                 Log.e(TAG, snapshot.getValue().toString());
+
+                // 파이어베이스에 일과종료 데이터가 ""이면 코드에있는 기본값으로 일과 종료 시간 설정
+                if(snapshot.getValue().toString().equals("")){
+                    Log.e(TAG, "일과 종료에 설정된 시간이 없습니다. 기본 시간으로 설정합니다.");
+                    makeFinishWorkTime(GOTOSLEEP_HOUR, GOTOSLEEP_MINIUTE, GOTOSLEEP_SECOND, GOTOSLEEP_MILISECOND);
+                }
                 try {
-                    date = sdf.parse(snapshot.getValue().toString());
+                    date = hours.parse(snapshot.getValue().toString());
+                    todayDate = day.parse(day.format(System.currentTimeMillis()));
                 } catch (ParseException e) {
                     e.printStackTrace();
                 }
 
-                finishTime = date.getTime();
-                Log.e(TAG, String.valueOf(finishTime));
+                Log.e(TAG, "date.getTime : " + date.getTime() + " todayDate : " + todayDate.getTime());
+                finishTime = date.getTime() + todayDate.getTime();
+                Log.e(TAG,  "종료 예약 시간 : " + finishTime);
             }
 
             @Override
@@ -140,9 +176,6 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-
-        // 일과 시간 메소드
-        makeWorkTime(WAKEUP_HOUR, WAKEUP_MINIUTE, WAKEUP_SECOND, WAKEUP_MILISECOND, GOTOSLEEP_HOUR, GOTOSLEEP_MINIUTE, GOTOSLEEP_SECOND, GOTOSLEEP_MILISECOND);
 
         // 서버의 STATUS가 변경될때 동작하는 이벤트 리스너
         serverStatus.addValueEventListener(new ValueEventListener() {
@@ -155,11 +188,11 @@ public class MainActivity extends AppCompatActivity {
                 // watchdog앱이 꺼지면 다시실행
                 if (snapshot.getValue().toString().equals("disconnected")){
                     // 일과시간 보다 일찍 앱이 종료되면 예기치 않은 종료라 판단하고 다시 앱실행.
-                    if (finishTime > System.currentTimeMillis()){
+                    if (System.currentTimeMillis() < finishTime){
                         Log.e(TAG, "일과시간 : " + finishTime + " 현재시간 : " + System.currentTimeMillis() + ". 아직 일과시간입니다. 앱을 다시 실행시킵니다.");
                         getPackageList("watchdog");
                     }
-                } else if(snapshot.getValue().toString().equals("connected")){
+                } else if(startTime != 0 && System.currentTimeMillis() > startTime && snapshot.getValue().toString().equals("connected")){
                     Log.e(TAG, "WatchDog앱이 다시 연결되었습니다.");
                 }
             }
@@ -217,8 +250,7 @@ public class MainActivity extends AppCompatActivity {
 
 
     // 일과 시간 지정하는 메소드
-    public void makeWorkTime(int startHour, int startMinute, int startSecond, int startMillisecond,
-                              int finishHour, int finishMinute, int finishSecond, int finishMillisecond){
+    public void makeStartWorkTime(int startHour, int startMinute, int startSecond, int startMillisecond){
         startWorkCalendar = Calendar.getInstance();
         finishWorkCalendar = Calendar.getInstance();
 
@@ -227,21 +259,33 @@ public class MainActivity extends AppCompatActivity {
         startWorkCalendar.set(Calendar.SECOND, startSecond);
         startWorkCalendar.set(Calendar.MILLISECOND, startMillisecond);
 
+
+        // 일과 시작 시간.
+        startTime = startWorkCalendar.getTimeInMillis();
+
+        String formatStartTimeHours = hours.format(startWorkCalendar.getTimeInMillis());
+        startWorkTime.setValue(formatStartTimeHours);
+
+    }
+
+    public void makeFinishWorkTime(int finishHour, int finishMinute, int finishSecond, int finishMillisecond){
+        finishWorkCalendar = Calendar.getInstance();
+
         finishWorkCalendar.set(Calendar.HOUR_OF_DAY, finishHour);
         finishWorkCalendar.set(Calendar.MINUTE, finishMinute);
         finishWorkCalendar.set(Calendar.SECOND, finishSecond);
         finishWorkCalendar.set(Calendar.MILLISECOND, finishMillisecond);
 
-        startTime = startWorkCalendar.getTimeInMillis();
+        // 일과 종료 시간.
         finishTime = finishWorkCalendar.getTimeInMillis();
 
 
-        String formatStartTime = sdf.format(startWorkCalendar.getTimeInMillis());
-        String formatFinishTime = sdf.format(finishWorkCalendar.getTimeInMillis());
-        startWorkTime.setValue(formatStartTime);
-        finishWorkTime.setValue(formatFinishTime);
+        String formatFinishTimeHours = hours.format(finishWorkCalendar.getTimeInMillis());
+        finishWorkTime.setValue(formatFinishTimeHours);
 
     }
+
+
 
     @Override
     protected void onPause() {
