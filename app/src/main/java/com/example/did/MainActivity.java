@@ -28,8 +28,9 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "osslog";
     FirebaseDatabase database;
-    DatabaseReference connectedRef, myStatus, serverStatus, clientSignal, dataInfo;
-    HashMap<String, Object> data = new HashMap<>();
+    DatabaseReference connectedRef, myStatus, serverStatus, adminSignal;
+
+    public static int USER_SIGNAL= 0;
 
     // 시간 비교를 위한 객체
     Calendar calendar;
@@ -44,8 +45,10 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         Log.e(TAG, "onResume!!");
-        info info = new info("CONNECTED", 0);
-        database.getReference().child("INFO").setValue(info);
+
+
+        // WatchDog에서 HOME키나 멀티탭키로 나갔을때 다시 앱을 실행시켜주면 onResume을 타기때문에 여기서 초기화
+        adminSignal.setValue(0);
     }
 
     @Override
@@ -57,35 +60,11 @@ public class MainActivity extends AppCompatActivity {
         connectedRef = database.getReference(".info/connected");
         myStatus = database.getReference("STATUS_Client");
         serverStatus = database.getReference("STATUS_Server");
-        clientSignal = database.getReference("Client_Signal");
+        adminSignal = database.getReference("ADMIN_SIGNAL");
 
 
-        info info = new info("CONNECTED", 0);
-        database.getReference().child("INFO").setValue(info);
 
-
-        database.getReference().child("INFO").addValueEventListener(new ValueEventListener() {
-            @Override
-            public void onDataChange(@NonNull DataSnapshot snapshot) {
-                Log.e(TAG, snapshot.toString() );
-                Log.e(TAG, snapshot.getValue().toString() );
-
-                info get = snapshot.getValue(info.class);
-                Log.e(TAG, String.valueOf(get.user));
-                Log.e(TAG, String.valueOf(get.status));
-
-
-            }
-
-            @Override
-            public void onCancelled(@NonNull DatabaseError error) {
-
-            }
-        });
-
-
-        // 의도된 종료시 1을 보내 watchdog에서 구별
-        clientSignal.setValue(0);
+        adminSignal.setValue(USER_SIGNAL);
 
 
         // 앱이 데이터베이스와 연결이 끊겼을시 파이어베이스 STATUS_Client 노드에 값 저장
@@ -190,8 +169,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onUserLeaveHint() {
         super.onUserLeaveHint();
-        info info = new info("HOME", 0);
-        database.getReference().child("INFO").setValue(info);
+        adminSignal.setValue(2);
     }
 
     @Override
@@ -207,8 +185,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         if (System.currentTimeMillis() <= backKeyPressedTime + 2000) {
-            info info = new info("DISCONNECTED", 1);
-            database.getReference().child("INFO").setValue(info);
+            adminSignal.setValue(1);
             ActivityCompat.finishAffinity(this);
             System.exit(0);
             toast.cancel();
