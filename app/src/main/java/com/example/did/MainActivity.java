@@ -20,12 +20,16 @@ import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.ValueEventListener;
 
+import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.time.LocalTime;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.TimeZone;
 import java.util.Timer;
 import java.util.TimerTask;
 
@@ -63,10 +67,9 @@ public class MainActivity extends AppCompatActivity {
     // 시간 데이터 포맷팅 (ex. 2022/07/14 11:25:35)
     SimpleDateFormat day = new SimpleDateFormat("yyyy/MM/dd");
     SimpleDateFormat hours = new SimpleDateFormat("HH:mm:ss");
+    SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
 
-    // 데이터베이스에서 시간넘어와서 밀리세컨드로 변환하기위한 변수수
-    public static Date date = null;
-    public static Date todayDate = null;
+
 
 
     @Override
@@ -91,6 +94,8 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        TimeZone.setDefault(TimeZone.getTimeZone("Asia/Seoul"));
+        //hours.setTimeZone(tz);
 
         Alarm alarm = new Alarm();
         IntentFilter filter = new IntentFilter();
@@ -98,6 +103,7 @@ public class MainActivity extends AppCompatActivity {
         filter.addAction(Intent.ACTION_SCREEN_OFF);
         registerReceiver(alarm, filter);
 
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         database = FirebaseDatabase.getInstance();
         connectedRef = database.getReference(".info/connected");
@@ -129,15 +135,15 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 try {
-                    date = hours.parse(snapshot.getValue().toString());
-                    todayDate = day.parse(day.format(System.currentTimeMillis()));
+                    // 오늘 날짜 yyyy/MM/dd 형태 + 공백 + 파이어베이스 END_TIME 데이터 를 합친 문자열을 Date로 파싱하고 getTime으로 long값 구함.
+                    Date startDate = dateFormat.parse(day.format(System.currentTimeMillis()) + " " + snapshot.getValue().toString());
+                    Log.e(TAG, "testDate: " + startDate + " testDate.getTime : " + startDate.getTime());
+                    startTime = startDate.getTime();
                 } catch (ParseException e) {
                     e.printStackTrace();
                 }
 
-                Log.e(TAG, "date.getTime : " + date.getTime() + " todayDate : " + todayDate.getTime());
-                startTime = date.getTime() + todayDate.getTime();
-                Log.e(TAG, "시작 예약 시간 : " + startTime);
+
 
             }
 
@@ -159,15 +165,15 @@ public class MainActivity extends AppCompatActivity {
                     makeFinishWorkTime(GOTOSLEEP_HOUR, GOTOSLEEP_MINIUTE, GOTOSLEEP_SECOND, GOTOSLEEP_MILISECOND);
                 }
                 try {
-                    date = hours.parse(snapshot.getValue().toString());
-                    todayDate = day.parse(day.format(System.currentTimeMillis()));
+                    // 오늘 날짜 yyyy/MM/dd 형태 + 공백 + 파이어베이스 END_TIME 데이터 를 합친 문자열을 Date로 파싱하고 getTime으로 long값 구함.
+                    Date finishDate = dateFormat.parse(day.format(System.currentTimeMillis()) + " " + snapshot.getValue().toString());
+                    Log.e(TAG, "testDate: " + finishDate + " testDate.getTime : " + finishDate.getTime());
+                    finishTime = finishDate.getTime();
                 } catch (ParseException e) {
                     e.printStackTrace();
                 }
 
-                Log.e(TAG, "date.getTime : " + date.getTime() + " todayDate : " + todayDate.getTime());
-                finishTime = date.getTime() + todayDate.getTime();
-                Log.e(TAG,  "종료 예약 시간 : " + finishTime);
+
             }
 
             @Override
