@@ -70,17 +70,15 @@ public class MainActivity extends AppCompatActivity {
     SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
 
 
-
-
     @Override
     protected void onResume() {
         super.onResume();
         Log.e(TAG, "onResume!!");
 
-
         // WatchDog에서 HOME키나 멀티탭키로 나갔을때 다시 앱을 실행시켜주면 onResume을 타기때문에 여기서 초기화
         adminSignal.setValue(0);
 
+        // 꺼진 화면을 켜주는 기능
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON);
 
         try {
@@ -94,8 +92,6 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        TimeZone.setDefault(TimeZone.getTimeZone("Asia/Seoul"));
-        //hours.setTimeZone(tz);
 
         Alarm alarm = new Alarm();
         IntentFilter filter = new IntentFilter();
@@ -103,7 +99,7 @@ public class MainActivity extends AppCompatActivity {
         filter.addAction(Intent.ACTION_SCREEN_OFF);
         registerReceiver(alarm, filter);
 
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
 
         database = FirebaseDatabase.getInstance();
         connectedRef = database.getReference(".info/connected");
@@ -112,8 +108,6 @@ public class MainActivity extends AppCompatActivity {
         adminSignal = database.getReference("yeonggwang1/ADMIN_SIGNAL");
         startWorkTime = database.getReference("yeonggwang1/START_TIME");
         finishWorkTime = database.getReference("yeonggwang1/END_TIME");
-
-
 
 
         // 관리자가 보낼 시그널 처음엔 0초기화
@@ -143,8 +137,6 @@ public class MainActivity extends AppCompatActivity {
                     e.printStackTrace();
                 }
 
-
-
             }
 
             @Override
@@ -159,6 +151,8 @@ public class MainActivity extends AppCompatActivity {
             public void onDataChange(@NonNull DataSnapshot snapshot) {
                 Log.e(TAG, snapshot.getValue().toString());
 
+
+
                 // 파이어베이스에 일과종료 데이터가 ""이면 코드에있는 기본값으로 일과 종료 시간 설정
                 if(snapshot.getValue().toString().equals("")){
                     Log.e(TAG, "일과 종료에 설정된 시간이 없습니다. 기본 시간으로 설정합니다.");
@@ -171,6 +165,16 @@ public class MainActivity extends AppCompatActivity {
                     finishTime = finishDate.getTime();
                 } catch (ParseException e) {
                     e.printStackTrace();
+                }
+
+
+                // 화면 절전 모드 진입
+                getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
+                // 현재 시간이 일과 종료시간 보다 작을시 == 일과 종료시간 전까지는 화면 절전 모드 해제
+                if (System.currentTimeMillis() <= finishTime) {
+                    getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                    Log.e(TAG, "화면계속켜기on!!");
                 }
 
 
@@ -313,6 +317,8 @@ public class MainActivity extends AppCompatActivity {
         backKeyPressed("뒤로가기 버튼을 한번 더 누르면 종료됩니다.", 5);
     }
 
+
+    // 뒤로가기 버튼 두번 누르면 앱 종료되는 기능
     public void backKeyPressed(String msg, double time) {
         if (System.currentTimeMillis() > backKeyPressedTime + (time * 1000)) {
             backKeyPressedTime = System.currentTimeMillis();

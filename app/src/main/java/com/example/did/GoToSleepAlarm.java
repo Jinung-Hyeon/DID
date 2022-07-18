@@ -9,7 +9,7 @@ import android.widget.Toast;
 
 public class GoToSleepAlarm extends BroadcastReceiver {
 
-    private static final String TAG = "AlarmTest";
+    private static final String TAG = "osslog";
 
     @Override
     public void onReceive(Context context, Intent intent) {
